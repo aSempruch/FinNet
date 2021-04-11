@@ -95,4 +95,4 @@ def search_ticker(company_name):
     if len(data) > 0:
         return True, data[0]['ticker']  # Get ticker for first result
     else:
-        return False, 0, "No results"  # No results found
+        return True, 0, "No results"  # No results found
