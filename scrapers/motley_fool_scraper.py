@@ -3,7 +3,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from time import sleep
-
+import argparse
 # #%%
 # r = requests.get('https://www.fool.com/investing-news/?page=1')
 #
@@ -19,28 +19,42 @@ class MotleyFoolScraper:
     LOG_LEVEL = 2
 
     URL_PREFIX = 'https://www.fool.com'
-    THREAD_SLEEP_TIME = lambda self: np.random.rand()*5
-    PAGE_SLEEP_TIME = lambda self: np.random.randint(2, 8)
+    THREAD_SLEEP_TIME = lambda self: np.random.rand()+0.5
+    PAGE_SLEEP_TIME = lambda self: np.random.randint(1, 15)
 
-    def __init__(self, storage):
-        self.storage = storage
+    def __init__(self, storage_path):
+        self.storage_path = storage_path
+        # self.storage = pd.read_csv(storage_path, index_col=None)
+        # self._save_storage()
+
+    def _save_storage(self):
+        self.storage.to_csv(self.storage_path, index=False)
+
+    def _append_storage(self, new_data):
+        pd.DataFrame(new_data).to_csv(self.storage_path, mode='a', index=False, header=False)
 
     def start_scrape(self, start_page=1, num_pages=0):
         page_idx = start_page
+        new_data = list()
         while num_pages == 0 or page_idx <= num_pages:
-            failed_attempts_left = 3
+
+            if self.LOG_LEVEL >= 1:
+                print("Starting page", page_idx)
+
+            failed_attempts_left = 10
 
             for page_url in self._fetch_article_list(page=page_idx):
                 if not page_url.startswith('/investing'):
                     continue
 
                 if self.LOG_LEVEL == 2:
-                    print("Scraping", self._complete_url(page_url))
+                    print("Scraping", page_url)
 
                 data = self._scrape_article(page_url)
 
                 if data is not None:
-                    self.storage.loc[len(self.storage)] = data
+                    new_data.append(data)
+                    # self.storage.loc[len(self.storage)] = data
                 else:
                     if self.LOG_LEVEL >= 1:
                         print("Failed on article link", self._complete_url(page_url))
@@ -52,6 +66,10 @@ class MotleyFoolScraper:
 
                 sleep(self.THREAD_SLEEP_TIME())
 
+            # self._save_storage()
+            self._append_storage(new_data)
+            new_data.clear()
+            sleep(self.PAGE_SLEEP_TIME())
             page_idx += 1
 
     def _complete_url(self, url):
@@ -83,10 +101,12 @@ class MotleyFoolScraper:
         title_text = title[0].text
 
         date = soup.find_all('div', attrs={'class': 'publication-date'})
-        if len(date) != 1:
+        if len(date) != 1 and len(date) != 2:
             if self.LOG_LEVEL >= 1: print("Got irregular size of 'publication-date' class list:", len(date))
             return None
         date_text = date[0].text.strip()
+        if len(date) == 2:
+            date_text += '---'+date[1].text.strip()
 
         body = soup.find_all('div', attrs={'class': 'main-col'})
 
@@ -112,6 +132,7 @@ class MotleyFoolScraper:
 
         return {
             'title': title_text,
+            'url': url,
             'date': date_text,
             'body': body_text,
             'companies': companies_list
@@ -119,7 +140,10 @@ class MotleyFoolScraper:
 
 
 if __name__ == '__main__':
-    storage = pd.read_csv('../Datasets/motleyfool/scraped.csv', index_col=None)
-    scraper = MotleyFoolScraper(storage)
-    scraper.start_scrape(start_page=2)
-    storage.to_csv('../Datasets/motleyfool/scraped.csv', index=False)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--page', type=int, default=0, help='Page to start scraping')
+    args = parser.parse_args()
+
+    scraper = MotleyFoolScraper('../Datasets/motleyfool/scraped.csv')
+    scraper.start_scrape(start_page=args.page)

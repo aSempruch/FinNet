@@ -1,11 +1,40 @@
+import os
 import pandas as pd
 import re
 import requests
+import ast
 from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation, remove_stopwords
 
 from secrets import OPENFIGI_API_KEY
 
-#%%
+
+def load_motley_data():
+    #%% Load Data
+    file_path = os.getenv('PATH_DATA') + '/motleyfool/processed.csv'
+    df = pd.read_csv(file_path)
+    #%% Cast datetime
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    #%% Parse companies
+    df['companies'] = df['companies'].apply(lambda company: ast.literal_eval(company))
+    #%%
+    return df
+
+
+def process_motley_raw():
+    #%% Load raw data
+    file_path = os.getenv('PATH_DATA') + '/motleyfool/scraped.csv'
+    df = pd.read_csv(file_path)
+
+    #%% Convert dates
+    df['datetime'] = df['date'].apply(
+        lambda date: date.split('---')[0].replace('Updated: ', '') if '---' in date else date)
+    df['datetime'] = df['datetime'].apply(
+        lambda date: date.replace('Updated: ', '') if 'Updated:' in date else date)
+    df['datetime'] = pd.to_datetime(df['datetime'], format='%b %d, %Y at %I:%M%p')
+
+    #%% Save Output
+    df.to_csv(os.getenv('PATH_DATA') + '/motleyfool/processed.csv', index=None)
+
 def _clean_text(text):
     text = re.sub(r"[^A-Za-z0-9^,!.\/'+-=]", " ", text)
     text = re.sub(r"what's", "what is ", text)
@@ -60,7 +89,6 @@ def preprocess_text(series):
     return pd.Series(result)
 
 
-#%%
 def search_ticker(company_name):
     """
     Search for company ticker by company name through OpenFigi API
