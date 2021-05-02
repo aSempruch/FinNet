@@ -1,2 +1,1 @@
-from util import load_motely_data
-
+from util import load_motley_data

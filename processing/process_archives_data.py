@@ -10,7 +10,7 @@ import json
 
 #%% Const
 VECTOR_SIZE = 200
-DF_FILE = 'Datasets/archive/2018_05_112b52537b67659ad3609a234388c50a/loaded-1000.csv'
+DF_FILE = '../Datasets/archive/2018_05_112b52537b67659ad3609a234388c50a/loaded-1000.csv'
 
 #%% Load Data
 df = pd.read_csv(DF_FILE)
@@ -61,5 +61,5 @@ for entry_str in df['entities.organizations'].values:
         # org_name = org_obj.name
         # print(org_name)
 #%% Save to file
-with open('Datasets/ticker_map.pkl', 'wb') as file:
+with open('../Datasets/ticker_map.pkl', 'wb') as file:
     pickle.dump(ticker_map, file)

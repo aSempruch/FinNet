@@ -1,17 +1,87 @@
 import os
 import pandas as pd
+import numpy as np
 import re
 import requests
 import ast
+from colorama import Fore
 from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation, remove_stopwords
 
+from sklearn.metrics import f1_score, cohen_kappa_score
+
 from secrets import OPENFIGI_API_KEY
+#%%
+TEST = bool(os.getenv("TEST"))
+VERBOSE = bool(os.getenv("VERBOSE"))
+TEST_SAMPLE_FRAC = 0.05
+if TEST: print(Fore.LIGHTCYAN_EX + "WARNING: RUNNING IN TEST MODE" + Fore.RESET)
 
 
-def load_motley_data():
+def score_model(model, x_test, y_true, verbose=True):
+    y_pred_probs = model.predict(x_test)
+    y_pred = (y_pred_probs[:, 0] > 0.5).astype(np.int)
+    scores = {
+        'F1': f1_score(y_true, y_pred),
+        'CK': cohen_kappa_score(y_true, y_pred)
+    }
+    if verbose:
+        print(scores)
+
+    return scores
+
+
+def score_sequence_model(model, test_sequence_list, verbose=True):
+    y_true = list()
+    y_pred = list()
+
+    for sequence in test_sequence_list:
+        y_true_list = list(sequence)[0][1].numpy()
+        y_pred_list = model.predict(sequence)
+
+        y_true_i = y_true_list[0][0].astype(int)
+        y_pred_i = y_pred_list.mean().round().astype(int)
+
+        y_true.append(y_true_i)
+        y_pred.append(y_pred_i)
+
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    scores = {
+        'F1': f1_score(y_true, y_pred),
+        'CK': cohen_kappa_score(y_true, y_pred)
+    }
+    if verbose:
+        print(scores)
+
+    return scores
+
+
+def load_sec_data(target='is_dps_cut', test=TEST):
+    #%%
+    file_path = os.getenv('VOYA_PATH_DATA') + 'processed_data.csv'
+    df = pd.read_csv(file_path, usecols=['cik', 'ticker_x', 'filing_date',
+        'year_x', 'filing_year_x', 'perm_id', 'ticker_y', 'year_y',
+        'company_name', 'is_dividend_payer', 'dps_change', 'is_dps_cut',
+        'z_environmental', 'd_environmental', 'sector', 'filing_year_y'])
+    if test: df = df.sample(frac=TEST_SAMPLE_FRAC)
+    #%%
+    df['year_x'] = df['year_x'].astype(int)
+
+    if target == 'is_dps_cut':
+        df.query("is_dividend_payer == 1 and not is_dps_cut.isnull()", inplace=True)
+        df['is_dps_cut'] = df['is_dps_cut'].astype(int)
+
+    return df
+
+
+def load_motley_data(file_path=None, test=TEST):
     #%% Load Data
-    file_path = os.getenv('PATH_DATA') + '/motleyfool/processed.csv'
+    if file_path is None:
+        file_path = os.getenv('PATH_DATA') + '/motleyfool/processed.csv'
     df = pd.read_csv(file_path)
+    if test: df = df.sample(frac=TEST_SAMPLE_FRAC)
+
     #%% Cast datetime
     df['datetime'] = pd.to_datetime(df['datetime'])
     #%% Parse companies
@@ -20,10 +90,74 @@ def load_motley_data():
     return df
 
 
+def load_merged_data(motley=None, test=TEST):
+    cache_file_path = os.getenv('PATH_CACHE') + '/data/motley_merged.csv'
+    if os.path.isfile(cache_file_path):
+        result = load_motley_data(file_path=cache_file_path, test=test)
+        if test: result = result.sample(frac=TEST_SAMPLE_FRAC)
+        print("Loaded merged data from cache")
+        return result
+
+    #%%
+    filings = load_sec_data(test=test)
+    if motley is None:
+        motley = process_motley(test=test)
+    #%%
+    sec_tickers = dict()
+    for idx, filing_row in filings.iterrows():
+        ticker = filing_row.ticker_x.strip()
+        if ticker not in sec_tickers:
+            sec_tickers[ticker] = dict()
+        sec_tickers[ticker][filing_row.year_x] = filing_row.is_dps_cut
+    #%%
+    result = pd.DataFrame(columns=list(motley.columns)+['is_dps_cut'])
+    for idx, article in motley.iterrows():
+        ticker = article.ticker
+        if ticker in sec_tickers:
+            year = article.year
+            if year in sec_tickers[ticker]:
+                article['is_dps_cut'] = sec_tickers[ticker][year]
+                result.loc[len(result)] = article
+
+    if VERBOSE:
+        print("Merged tickers.\tFrom", motley.shape[0], "to", result.shape[0], "size")
+    # if TEST:
+    #     result = result.sample(frac=TEST_SAMPLE_FRAC)
+    return result
+    #%%
+
+
+def process_motley(filter_multi_org=True, test=TEST):
+    """
+    Process motley fool data
+    :param filter_multi_org: ignore articles that mention multiple companies
+    :return:
+    """
+    df = load_motley_data(test=test)
+    if VERBOSE: print("Starting with", df.shape[0], "articles")
+
+    df['body'] = df['body'].apply(lambda x: x.replace('\n---', ''))
+
+    if filter_multi_org:  # Filter out articles that mention more than 1 company
+        df = df.loc[df['companies'].apply(lambda x: len(x) == 1)]
+        if VERBOSE: print("Removed multi_org articles. Left with", df.shape[0], "articles")
+    else:  # Filter out articles that don't mention any companies
+        df = df.loc[df['companies'].apply(lambda x: len(x) > 0)]
+
+    df['ticker'] = df['companies'].apply(lambda x: x[0][0].split(':')[1])
+    df['year'] = df['datetime'].apply(lambda x: x.year)
+
+    return df
+
+
 def process_motley_raw():
     #%% Load raw data
     file_path = os.getenv('PATH_DATA') + '/motleyfool/scraped.csv'
     df = pd.read_csv(file_path)
+
+    #%% Remove empty article bodies
+    df.query("not body.isnull()", inplace=True)
+    df = df.loc[df['body'].apply(lambda x: len(x) > 0)]
 
     #%% Convert dates
     df['datetime'] = df['date'].apply(
@@ -34,6 +168,7 @@ def process_motley_raw():
 
     #%% Save Output
     df.to_csv(os.getenv('PATH_DATA') + '/motleyfool/processed.csv', index=None)
+
 
 def _clean_text(text):
     text = re.sub(r"[^A-Za-z0-9^,!.\/'+-=]", " ", text)

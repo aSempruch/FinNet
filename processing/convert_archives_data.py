@@ -11,7 +11,7 @@ df = None
 
 #%% Traverse all files and add to DF
 count = 0
-dir_path, _, filenames = next(os.walk('Datasets/archive/2018_05_112b52537b67659ad3609a234388c50a/'))
+dir_path, _, filenames = next(os.walk('../Datasets/archive/2018_05_112b52537b67659ad3609a234388c50a/'))
 for filename in filenames:
     with open(f'{dir_path}\\{filename}', 'r', encoding='utf-8') as file:
         data_json = json.load(file)
