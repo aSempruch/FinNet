@@ -4,6 +4,7 @@ import numpy as np
 import re
 import requests
 import ast
+import argparse
 from colorama import Fore
 from gensim.parsing.preprocessing import preprocess_string, strip_tags, strip_punctuation, remove_stopwords
 
@@ -15,6 +16,16 @@ TEST = bool(os.getenv("TEST"))
 VERBOSE = bool(os.getenv("VERBOSE"))
 TEST_SAMPLE_FRAC = 0.05
 if TEST: print(Fore.LIGHTCYAN_EX + "WARNING: RUNNING IN TEST MODE" + Fore.RESET)
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-e', '--epochs', default=10, type=int)
+    parser.add_argument('-s', '--sequencelength', default=50, type=int)
+    parser.add_argument('-o', '--overlap', default=30, type=int)
+    parser.add_argument('-m', '--model', default=0, type=int)
+    parser.add_argument('-v', '--vectorizer', default=0, type=int)
+    return parser.parse_args()
 
 
 def score_model(model, x_test, y_true, verbose=True):
@@ -121,8 +132,8 @@ def load_merged_data(motley=None, test=TEST):
 
     if VERBOSE:
         print("Merged tickers.\tFrom", motley.shape[0], "to", result.shape[0], "size")
-    # if TEST:
-    #     result = result.sample(frac=TEST_SAMPLE_FRAC)
+    if test:
+        result = result.sample(frac=TEST_SAMPLE_FRAC)
     return result
     #%%
 
@@ -168,6 +179,41 @@ def process_motley_raw():
 
     #%% Save Output
     df.to_csv(os.getenv('PATH_DATA') + '/motleyfool/processed.csv', index=None)
+
+
+def generate_sequence_list(df, sequence_length, x_selector, y_selector, overlap=0):
+    x_sequences = list()
+    y_vals = list()
+    df_sorted = df.sort_values(by='datetime')
+
+    for ticker in df_sorted.ticker.unique():
+        df_single_ticker = df_sorted[df_sorted.ticker == ticker]
+        for year in df_single_ticker.year.unique():
+            df_single_year = df_single_ticker[df_single_ticker.year == year]
+
+            # print(len(df_single_year))
+            x = x_selector(df_single_year)
+            y = y_selector(df_single_year)
+            # x_sequence = kprocessing.timeseries_dataset_from_array(x, targets=y, sequence_length=sequence_length)
+
+            for x_idx in range(0, len(x), sequence_length-overlap):
+                seq = np.zeros((sequence_length, len(x[0])))
+                # x_offset = sequence_length*x_idx
+                for seq_idx in range(sequence_length):
+                    if (x_idx + seq_idx) < len(x):
+                        seq[seq_idx] = x[x_idx + seq_idx]
+                # for seq_idx, val in enumerate(x[x_offset:(x_offset+sequence_length)]):
+                #     seq[(x_offset+seq_idx)]
+                x_sequences.append(seq)
+                y_vals.append(y[0])
+                # y_vals.append(y)
+
+            # x_sequence = x[:sequence_length]
+            # x_sequences.append(x_sequence)
+            # y_vals.append(y[0])
+            # sequences.append(x_sequence)-
+
+    return np.array(x_sequences), np.array(y_vals)
 
 
 def _clean_text(text):
@@ -252,7 +298,7 @@ def search_ticker(company_name):
             error = (r.status_code, error_map[r.status_code])
         else:
             error = [r.status_code]
-        return False, *error
+        return False, (*error)
 
     data = r.json()['data']
     if len(data) > 0:

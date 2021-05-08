@@ -5,6 +5,7 @@ from sklearn.preprocessing import normalize
 
 from models.baseline_nn import BaselineNN
 from models.dnn1 import DNN1
+from models.baseline_rnn import BaselineRNN
 from util import load_merged_data, score_model
 from processing.news_processor import construct_doc2vec
 
@@ -29,8 +30,9 @@ x_test = normalize(np.array(test_data['doc2vec'].tolist()))
 y_true = test_data['is_dps_cut'].astype(np.int).to_numpy().reshape((-1, 1))
 
 #%% Train Model
-# model = BaselineNN()
-model = DNN1()
+model = BaselineNN()
+# model = DNN1()
+model = BaselineRNN()
 model.train(x_train, y_train, epochs=3000)
 
 

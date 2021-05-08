@@ -56,7 +56,7 @@ test_list = generate_sequence_list(train_data, sequence_length=5,
 # %%
 # model = BaselineRNN()
 model = RNN1()
-model.train_sequences(train_list, input_shape=(5, 10), epochs=1)
+model.train_sequences(train_list, input_shape=(5, 10), epochs=1000)
 
 # %%
 scores = score_sequence_model(model, test_list)

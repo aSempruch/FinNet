@@ -1,10 +1,49 @@
 import pandas as pd
 import numpy as np
 import gensim
-
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 
 from util import load_merged_data, load_sec_data, preprocess_text, VERBOSE
 
+
+class ConstructTfidf:
+
+    def __init__(self, params=None):
+        params = dict() if params is None else params
+
+        self.vectorizer = TfidfVectorizer(
+            tokenizer=lambda x: x,
+            preprocessor=lambda x: x,
+            **params
+        )
+
+    def fit_transform(self, text_series):
+        lst_corpus = preprocess_text(text_series)
+        return self.vectorizer.fit_transform(lst_corpus).toarray().tolist()
+
+    def transform(self, text_series):
+        lst_corpus = preprocess_text(text_series)
+        return self.vectorizer.transform(lst_corpus).toarray().tolist()
+
+
+class ConstructBOW:
+
+    def __init__(self, params=None):
+        params = dict() if params is None else params
+
+        self.vectorizer = CountVectorizer(
+            tokenizer=lambda x: x,
+            preprocessor=lambda x: x,
+            **params
+        )
+
+    def fit_transform(self, text_series):
+        lst_corpus = preprocess_text(text_series)
+        return self.vectorizer.fit_transform(lst_corpus).toarray().tolist()
+
+    def transform(self, text_series):
+        lst_corpus = preprocess_text(text_series)
+        return self.vectorizer.transform(lst_corpus).toarray().tolist()
 
 def construct_word2vec(text_series, params):
     #%%

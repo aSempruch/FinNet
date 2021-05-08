@@ -2,6 +2,7 @@ from util import load_merged_data
 from tensorflow.keras import models, layers, preprocessing as kprocessing
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import Sequential
+from util import TEST
 #%%
 
 
@@ -14,6 +15,7 @@ class BaselineNN:
 
     def train(self, X, y, epochs=None):
         epochs = self.epochs if epochs is None else epochs
+        if TEST: epochs = 1
         self._construct_model(X.shape)
         self.model.fit(x=X, y=y, epochs=epochs, validation_split=0.2)
 

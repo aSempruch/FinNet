@@ -7,13 +7,17 @@ from util import TEST
 
 class BaselineRNN(BaselineNN):
 
-    def train_sequences(self, sequence_list, input_shape, epochs=None):
+    def train_sequences(self, x, y, input_shape, epochs=None):
         self._construct_model(input_shape)
 
         if TEST: epochs = 1
 
-        for sequence in sequence_list:
-            self.model.fit(sequence, epochs=epochs)
+        self.model.fit(x, y, epochs=epochs)
+        # self.model.train_on_batch(
+        #     sequence_list
+        # )
+        # for sequence in sequence_list:
+        #     self.model.fit(sequence, epochs=epochs)
 
     def _construct_model(self, input_shape, output_size=1):
         # %%
